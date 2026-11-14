@@ -215,37 +215,6 @@ class AudioDownloader:
                 if os.path.exists(path):
                     os.remove(path)
 
-                # TEMP DEBUG: dump the stream layout of the exact WebVPN URL
-                # so we can see whether an audio stream exists and why
-                # `-vn ... -f f32le` yields "Output file does not contain any
-                # stream".  Fires when FICS_PROBE_STREAMS is truthy OR the
-                # sub_id is in the hardcoded diagnostic set below.  Remove
-                # this whole block (and the set) after diagnosis.
-                _probe_subs = {"657345", "677708", "683584", "689665",
-                               "694328", "700130", "706151"}
-                if (os.environ.get("FICS_PROBE_STREAMS", "").strip()
-                        in ("1", "true", "yes")) or (str(sub_id) in _probe_subs):
-                    try:
-                        _pf = subprocess.run(
-                            ["ffprobe", "-v", "error",
-                             "-headers", headers,
-                             "-show_entries",
-                             "stream=index,codec_type,codec_name,channels,sample_rate",
-                             "-show_entries", "format=format_name,duration",
-                             "-of", "default=noprint_wrappers=1",
-                             vpn_url],
-                            capture_output=True, text=True, timeout=90,
-                        )
-                        print(
-                            f"[PROBE {sub_id}] rc={_pf.returncode}\n"
-                            f"[PROBE {sub_id}] stdout<<\n{_pf.stdout}>>\n"
-                            f"[PROBE {sub_id}] stderr<<\n{_pf.stderr[-1500:]}>>",
-                            flush=True,
-                        )
-                    except Exception as _pe:
-                        print(f"[PROBE {sub_id}] ffprobe failed: "
-                              f"{type(_pe).__name__}: {_pe}", flush=True)
-
                 cmd = [
                     "ffmpeg", "-y",
                     "-headers", headers,
