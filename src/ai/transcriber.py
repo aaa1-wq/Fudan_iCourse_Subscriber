@@ -596,23 +596,32 @@ class Transcriber:
         while not os.path.exists(audio_path):
             if ffmpeg_proc.poll() is not None:
                 stderr_text = b"".join(stderr_chunks).decode(errors="replace")[-500:]
-                # ffmpeg can die before the output file is created for two
-                # very different reasons:
+                # ffmpeg can die before the output file is created for a few
+                # different reasons:
                 #   1) The input genuinely has NO audio stream (e.g. a silent
                 #      screen/PPT recording, video-only h264).  ffmpeg reports
                 #      "Output file does not contain any stream" / "does not
-                #      contain any stream".  This is permanent — no amount of
-                #      retrying will produce audio — so surface it as
-                #      NoAudioStreamError and let the caller fall back to a
-                #      PPT-only summary.
-                #   2) A transient failure (e.g. "403 Forbidden" from an
-                #      expired signed URL, network reset).  This is
-                #      retryable — keep the generic RuntimeError so the
-                #      caller records an error and retries next run.
-                if "does not contain any stream" in stderr_text:
+                #      contain any stream".
+                #   2) The signed WebVPN URL expired / was rejected, so ffmpeg
+                #      never opened the input: "403 Forbidden" / "Error opening
+                #      input" / "Error opening input file".
+                # Both mean we have no audio to transcribe *this run*.  We
+                # surface NoAudioStreamError for both so the caller falls back
+                # to a PPT-only summary — the lecture still gets notes from its
+                # screenshots, and the run never crashes on an unfetchable
+                # audio stream.  (Case 2 is really retryable, but choosing to
+                # summarize from PPT now beats crashing; the lecture is marked
+                # processed once the PPT summary is saved.)
+                _no_audio = (
+                    "does not contain any stream" in stderr_text
+                    or "403 Forbidden" in stderr_text
+                    or "Error opening input" in stderr_text
+                )
+                if _no_audio:
                     raise NoAudioStreamError(
-                        f"ffmpeg found no audio stream (video-only / silent "
-                        f"recording) for {audio_path}.\n"
+                        f"no transcribable audio for {audio_path} "
+                        f"(video-only/silent, or the signed URL was "
+                        f"rejected/expired).\n"
                         f"stderr (last 500 chars):\n{stderr_text}"
                     )
                 raise RuntimeError(
