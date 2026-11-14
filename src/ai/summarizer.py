@@ -103,7 +103,11 @@ class Summarizer:
                 },
             ],
             # temperature=0.3,
-            timeout=180,
+            # 180s was too tight for long lectures (e.g. a 165-min lecture →
+            # 22k-char prompt occasionally exceeded it and timed out, failing
+            # the whole summary since it was the only working model). 300s
+            # gives large inputs headroom while still bounding a stuck call.
+            timeout=300,
         )
         if not response.choices:
             raise ValueError("API returned empty choices — likely content filter or quota exceeded")
