@@ -145,13 +145,10 @@ class LectureRunner:
             self._ppt.prefetch_and_ocr(self._client, next_course, next_sub)
 
         # ── Phase F — bucketed-prompt LLM summary ──────────────────────
-        if not transcript.strip():
-            self._reporter.info("    Empty transcript, skipping summary.")
-            self._release_audio(sub_id)
-            self._db.mark_processed(sub_id)
-            self._db.clear_error(sub_id)
-            return None
-
+        # An empty transcript is NOT a reason to skip: video-only (silent)
+        # lectures are summarized from their PPT screenshots alone.  Only
+        # skip when there is neither a transcript nor any usable PPT text —
+        # _summarize returns None in that case (empty assembled prompt).
         summary = self._summarize(
             sub_id, course_title, transcript, transcript_segments,
         )
@@ -322,11 +319,19 @@ class LectureRunner:
                 handle.path, handle.process, handle.stderr_chunks,
             )
         except NoAudioStreamError as e:
-            self._reporter.info(f"    [SKIP] Video-only (no audio stream): {e}")
-            self._db.update_error(sub_id, "transcribe", str(e))
-            self._db.mark_processed(sub_id)
+            # The recording has no audio track at all (silent screen / PPT
+            # recording).  ASR can never produce a transcript, but the
+            # lecture's PPT screenshots ARE the content we want to summarize.
+            # Return an empty transcript so the pipeline falls through to a
+            # PPT-only summary in Phase F (bucketer.assemble handles an empty
+            # transcript + PPT pages).  Do NOT mark processed here — that
+            # happens in Phase G after the summary is saved.
+            self._reporter.info(
+                f"    [PPT-ONLY] No audio stream, summarizing from PPT only: {e}"
+            )
+            self._db.clear_error(sub_id)
             self._release_audio(sub_id)
-            return None, None
+            return "", None
         except IncompleteAudioError as e:
             # Truncated download (ffmpeg may even exit 0 on a server-side
             # cut).  Don't persist the partial transcript — it would
@@ -356,6 +361,18 @@ class LectureRunner:
             prompt_text, mode = bucketer.assemble(
                 transcript, transcript_segments, kept_pages,
             )
+            # Nothing to summarize: no transcript AND no OCR'd PPT text.
+            # (A silent, video-only lecture with no PPT screenshots has no
+            # source material.)  Skip cleanly rather than send an empty
+            # prompt to the LLM.
+            if not prompt_text.strip():
+                self._reporter.info(
+                    "    No transcript and no PPT text — nothing to "
+                    "summarize, skipping."
+                )
+                self._db.mark_processed(sub_id)
+                self._db.clear_error(sub_id)
+                return None
             self._reporter.info(
                 f"    [Time] Generating summary at "
                 f"{time.strftime('%H:%M:%S')}"
