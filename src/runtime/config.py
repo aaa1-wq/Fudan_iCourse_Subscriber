@@ -33,19 +33,12 @@ MODEL_PROVIDERS: list[dict] = [
         "default_base_url": "https://api-inference.modelscope.cn/v1/",
         "models": [
             "deepseek-ai/DeepSeek-V4-Pro-0813",
-            "deepseek-ai/DeepSeek-V4.1-Flash"
-            
+            # "deepseek-ai/DeepSeek-V4.1-Flash",  # 400: no provider supported
         ],
     },
-    {
-        "name": "deepseek",
-        "api_key_env": "DEEPSEEK_API_KEY",
-        "base_url_env": "DEEPSEEK_BASE_URL",
-        "default_base_url": "https://api.deepseek.com/v1",
-        "models": [
-            "deepseek-v4-flash"
-        ],
-    },
+    # deepseek provider removed: DEEPSEEK_API_KEY returned 401 on every call.
+    # V4-Pro-0813 (above) is the only verified-working model; dead fallbacks
+    # only masked its transient timeouts instead of covering them.
     # {
     #     "name": "modelscope",
     #     "api_key_env": "DASHSCOPE_API_KEY",
@@ -144,7 +137,7 @@ SILERO_VAD_PATH = os.environ.get("SILERO_VAD_PATH", "silero_vad.onnx")
 # ASR_MODEL_DIR must point at a matching sherpa-onnx model bundle:
 #   sensevoice — sherpa-onnx-sense-voice-* (multi-lang CTC, single model)
 #   firered    — sherpa-onnx-fire-red-asr2-ctc-* (CTC, single model.onnx)
-#   zipformer  — sherpa-onnx-zipformer-* (transducer, encoder/decoder/joiner)
+#   zipformer  — sherpa-onnx-transducer-* (encoder/decoder/joiner)
 ASR_BACKEND = os.environ.get("ASR_BACKEND", "sensevoice").strip().lower()
 # Inference thread count.  4 fully saturates a 4-vCPU GitHub runner.
 ASR_NUM_THREADS = int(os.environ.get("ASR_NUM_THREADS", "4"))
