@@ -596,6 +596,25 @@ class Transcriber:
         while not os.path.exists(audio_path):
             if ffmpeg_proc.poll() is not None:
                 stderr_text = b"".join(stderr_chunks).decode(errors="replace")[-500:]
+                # ffmpeg can die before the output file is created for two
+                # very different reasons:
+                #   1) The input genuinely has NO audio stream (e.g. a silent
+                #      screen/PPT recording, video-only h264).  ffmpeg reports
+                #      "Output file does not contain any stream" / "does not
+                #      contain any stream".  This is permanent — no amount of
+                #      retrying will produce audio — so surface it as
+                #      NoAudioStreamError and let the caller fall back to a
+                #      PPT-only summary.
+                #   2) A transient failure (e.g. "403 Forbidden" from an
+                #      expired signed URL, network reset).  This is
+                #      retryable — keep the generic RuntimeError so the
+                #      caller records an error and retries next run.
+                if "does not contain any stream" in stderr_text:
+                    raise NoAudioStreamError(
+                        f"ffmpeg found no audio stream (video-only / silent "
+                        f"recording) for {audio_path}.\n"
+                        f"stderr (last 500 chars):\n{stderr_text}"
+                    )
                 raise RuntimeError(
                     f"ffmpeg exited (rc={ffmpeg_proc.returncode}) before "
                     f"writing audio file {audio_path}.\nstderr:\n{stderr_text}"
